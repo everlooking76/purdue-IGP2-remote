@@ -1,0 +1,90 @@
+pipeline 
+{
+    environment {
+        JAVA_HOME = '/usr/lib/jvm/default-java' // Setting JAVA_HOME for the entire pipeline
+        MAVEN_HOME = '/opt/maven'
+        PATH = "$MAVEN_HOME/bin:$JAVA_HOME/bin:$PATH"  
+        DOCKER_IMAGE = "everlooking76/igp2" 
+        DOCKER_CREDENTIALS_ID = "4e5760e3-be16-4cf9-a863-b0202b41f469"
+        ANSIBLE_SERVER = '192.168.178.101'
+        ANSIBLE_USER = 'sm'
+        ANSIBLE_PLAYBOOK = '/home/sm/gitRepos/purdue-IGP2-remote/Ansible-files/Deploy_Minikube_Cluster.yaml'
+        ANSIBLE_HOSTS = '/home/sm/gitRepos/purdue-IGP2-remote/Ansible-files/hosts2'  
+    }
+    agent any  // Here we define the agent where the pipeline will run
+    stages {
+        stage('Checkout Code') {
+            steps {
+                // Using created ssh key-pairs credentials to access remote private git-Hub repo 
+                sshagent (credentials: ['db7b16ac-87cc-4fce-b7ed-017de096b3b2']){
+                    // Checkout my repo git@github.com:everlooking76/purdue-IGP2-remote.git
+                    git url: 'git@github.com:everlooking76/purdue-IGP2-remote.git', branch: 'main'
+                }
+                
+            }
+        }
+        stage('Compile') {
+            steps {
+                // Using Maven to compile provided source code
+                sh 'mvn compile'
+            }
+        }
+        stage('Test') {
+            steps {
+                // Using Maven to test the new source code
+                sh 'mvn test'
+            }
+        }
+        stage('Build') {
+            steps {
+                // Using Maven for packaging the source code 
+                sh 'mvn package'
+            }
+        }
+        stage('Build Docker Image') {
+            steps { 
+                // Using  Dockerfile to create a docker image 
+                sh ''' 
+                    cp /var/lib/jenkins/workspace/$JOB_NAME/target/XYZtechnologies-1.0.war xyz_technologies.war
+                    docker build -t xyz_technologies:$BUILD_NUMBER .
+                    docker tag xyz_technologies:$BUILD_NUMBER ${DOCKER_IMAGE}:latest
+                   '''
+            }
+        }
+        stage('Login to Docker') {
+            steps {
+                // Login to Docker Hub 
+                withCredentials([usernamePassword(credentialsId: DOCKER_CREDENTIALS_ID, usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
+                sh 'echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin'
+                }
+            }
+        }
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    sh 'docker push ${DOCKER_IMAGE}' // Push Docker image to Docker Hub
+                }
+            }
+        }
+
+        stage('Logout from Docker Hub') {
+            steps {
+                script {
+                    sh 'docker logout' // Logout from Docker Hub
+                }
+            }
+        }
+        stage('Run Ansible Playbook') {
+            steps {
+                sshagent (credentials: ['f36d0885-e977-4149-8a77-c0f22ae72434']) {
+                     
+                    sh """
+                    ssh ${ANSIBLE_USER}@${ANSIBLE_SERVER} ansible-playbook -i ${ANSIBLE_HOSTS} ${ANSIBLE_PLAYBOOK}
+                    """
+                }
+            }
+        }
+    }
+
+    
+}
