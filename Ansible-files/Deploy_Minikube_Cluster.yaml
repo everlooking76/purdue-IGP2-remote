@@ -1,0 +1,8 @@
+# ansible/playbook.yaml
+---
+- name: Apply Kubernetes manifest
+  hosts: minikube
+  tasks:
+    - name: Apply Kubernetes manifest using kubectl
+      command: kubectl apply -f /home/sm/tomcat-deployment2.yaml
+      become: false 

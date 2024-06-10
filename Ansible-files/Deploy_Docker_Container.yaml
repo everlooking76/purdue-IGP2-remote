@@ -1,0 +1,19 @@
+---
+- name: Deploy Docker Container
+  hosts: docker_server
+  become: false 
+  tasks:
+    - name: Pull Docker image
+      docker_image:
+        name: everlooking76/igp2
+        tag: latest
+        source: pull
+
+    - name: Run Docker container
+      docker_container:
+        name: igp2_container
+        image: everlooking76/igp2:latest
+        state: started
+        restart_policy: always
+        ports:
+          - "8081:8080"  # Adjust the ports according to your needs
